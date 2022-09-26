@@ -679,7 +679,7 @@ static int consolidate_vector(
 	return 1;
 }
 
-static void LoadStoreOperandPair(LowLevelILFunction& il, bool load, InstructionOperand& operand1,
+static void StoreOperandPair(LowLevelILFunction& il, InstructionOperand& operand1,
     InstructionOperand& operand2, InstructionOperand& operand3)
 {
 	unsigned sz = REGSZ_O(operand1);
@@ -694,22 +694,54 @@ static void LoadStoreOperandPair(LowLevelILFunction& il, bool load, InstructionO
 	ExprId addr0 = GetILOperandEffectiveAddress(il, operand3, 8, oclass, 0);
 	ExprId addr1 = GetILOperandEffectiveAddress(il, operand3, 8, oclass, sz);
 
-	/* load/store */
-	if (load)
-	{
-		il.AddInstruction(ILSETREG_O(operand1, il.Load(sz, addr0)));
-		il.AddInstruction(ILSETREG_O(operand2, il.Load(sz, addr1)));
-	}
-	else
-	{
-		il.AddInstruction(il.Store(sz, addr0, ILREG_O(operand1)));
-		il.AddInstruction(il.Store(sz, addr1, ILREG_O(operand2)));
-	}
+	il.AddInstruction(il.Store(sz, addr0, ILREG_O(operand1)));
+	il.AddInstruction(il.Store(sz, addr1, ILREG_O(operand2)));
 
 	/* do post-indexing */
 	tmp = GetILOperandPostIndex(il, operand3);
 	if (tmp)
 		il.AddInstruction(tmp);
+}
+
+static void LoadOperandPair(LowLevelILFunction& il, InstructionOperand& operand1,
+    InstructionOperand& operand2, InstructionOperand& operand3, size_t dataSize, bool signedLoad) {
+	size_t regSize = REGSZ_O(operand1);
+
+	/* do pre-indexing */
+	ExprId tmp = GetILOperandPreIndex(il, operand3);
+	if (tmp)
+		il.AddInstruction(tmp);
+
+	/* compute addresses */
+	OperandClass oclass = (operand3.operandClass == MEM_PRE_IDX) ? MEM_REG : operand3.operandClass;
+
+	ExprId addr0 = GetILOperandEffectiveAddress(il, operand3, 8, oclass, 0);
+	ExprId regTemp = il.Register(REGSZ_O(operand3), LLIL_TEMP(0));
+	il.AddInstruction(il.SetRegister(REGSZ_O(operand3), LLIL_TEMP(0), addr0));
+
+	if (signedLoad && dataSize < regSize) {
+		il.AddInstruction(ILSETREG_O(operand1, il.SignExtend(regSize, il.Load(dataSize, regTemp))));
+		il.AddInstruction(ILSETREG_O(operand2, il.SignExtend(regSize, 
+			il.Load(dataSize, il.Add(REGSZ_O(operand3), regTemp, il.Const(REGSZ_O(operand3), dataSize))))));
+	} else {
+		il.AddInstruction(ILSETREG_O(operand1, il.Load(dataSize, regTemp)));
+		il.AddInstruction(ILSETREG_O(operand2, il.Load(dataSize, 
+			il.Add(REGSZ_O(operand3), regTemp, il.Const(REGSZ_O(operand3), dataSize)))));
+	}
+
+	/* do post-indexing */
+	if (operand3.operandClass == MEM_POST_IDX) {
+		if (operand3.reg[1] == REG_NONE) {
+			// ..., [Xn], #imm
+			if (IMM_O(operand3) != 0) {
+				il.AddInstruction(ILSETREG_O(operand3, il.Add(REGSZ_O(operand3), regTemp, il.Const(REGSZ_O(operand3), IMM_O(operand3)))));
+			}
+		}
+		else {
+			// ..., [Xn], <Xm>
+			il.AddInstruction(ILSETREG_O(operand3, il.Add(REGSZ_O(operand3), regTemp, il.Register(8, operand3.reg[1]))));
+		}
+	}
 }
 
 
@@ -1766,7 +1798,10 @@ bool GetLowLevelILForInstruction(
 		break;
 	case ARM64_LDP:
 	case ARM64_LDNP:
-		LoadStoreOperandPair(il, true, instr.operands[0], instr.operands[1], instr.operands[2]);
+		LoadOperandPair(il, instr.operands[0], instr.operands[1], instr.operands[2], REGSZ_O(operand1), false);
+		break;
+    case ARM64_LDPSW: 
+		LoadOperandPair(il, operand1, operand2, operand3, 4, true);
 		break;
 	case ARM64_LDR:
 	case ARM64_LDUR:
@@ -2105,7 +2140,7 @@ bool GetLowLevelILForInstruction(
 		break;
 	case ARM64_STP:
 	case ARM64_STNP:
-		LoadStoreOperandPair(il, false, instr.operands[0], instr.operands[1], instr.operands[2]);
+		StoreOperandPair(il, instr.operands[0], instr.operands[1], instr.operands[2]);
 		break;
 	case ARM64_STR:
 	case ARM64_STLR:
