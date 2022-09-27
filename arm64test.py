@@ -1898,8 +1898,8 @@ test_cases = \
 	(b'\xCB\x10\xC0\xDA', 'LLIL_INTRINSIC([x11],_CountLeadingZeros,LLIL_CALL_PARAM([LLIL_REG.q(x6)]))'), # clz     x11, x6
 	(b'\x63\x00\xC0\xDA', 'LLIL_INTRINSIC([x3],__rbit,LLIL_CALL_PARAM([LLIL_REG.q(x3)]))'), # rbit    x3, x3
 	# Unknown system register
-	(b'\x21\x00\x1B\xD5', 'LLIL_INTRINSIC([sysreg_unknown],_WriteStatusReg,LLIL_CALL_PARAM([LLIL_REG.q(x1)]))'), # msr s3_3_c0_c0_1, x1
-	(b'\x23\x00\x3B\xD5', 'LLIL_INTRINSIC([x3],_ReadStatusReg,LLIL_CALL_PARAM([LLIL_REG.q(sysreg_unknown)]))'), # mrs x3, s3_3_c0_c0_1
+	(b'\x21\xf4\x18\xD5', 'LLIL_INTRINSIC([sysreg_unknown],_WriteStatusReg,LLIL_CALL_PARAM([LLIL_REG.q(x1)]))'), # msr s3_0_c15_c4_1, x1
+	(b'\x23\xf4\x38\xD5', 'LLIL_INTRINSIC([x3],_ReadStatusReg,LLIL_CALL_PARAM([LLIL_REG.q(sysreg_unknown)]))'), # mrs x3, s3_0_c15_c4_1
 	(b'\xE0\x03\x9F\xD6', 'LLIL_INTRINSIC([],_eret,LLIL_CALL_PARAM([]));' + \
 						 ' LLIL_TRAP(0)'), # eret
 	(b'\x00\x08\x21\x1E', 'LLIL_SET_REG.d(s0,LLIL_FMUL.d(LLIL_REG.d(s0),LLIL_REG.d(s1)))'), # fmul s0, s0, s1
