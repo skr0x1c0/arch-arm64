@@ -1224,6 +1224,23 @@ static void GenMemAtomic(LowLevelILFunction& il, InstructionOperand& regAddr, Me
     }
 }
 
+static void GenMemAtomicCompareAndSwap(LowLevelILFunction& il, InstructionOperand& regOldValue, InstructionOperand& regNewValue, 
+                                       InstructionOperand& regAddr, uint32_t dataSize) {
+    size_t regSize = REGSZ_O(regOldValue);
+    if (dataSize < regSize) {
+        il.AddInstruction(il.SetRegister(regSize, LLIL_TEMP(0), il.ZeroExtend(regSize, il.Load(dataSize, ILREG_O(regAddr)))));
+    } else {
+        il.AddInstruction(il.SetRegister(regSize, LLIL_TEMP(0), il.Load(dataSize, ILREG_O(regAddr))));
+    }
+    ExprId regTemp = il.Register(regSize, LLIL_TEMP(0));
+    LowLevelILLabel trueCode, done;
+    il.AddInstruction(il.If(il.CompareEqual(regSize, ILREG_O(regOldValue), regTemp), trueCode, done));
+    il.MarkLabel(trueCode);
+    il.AddInstruction(il.Store(dataSize, ILREG_O(regAddr), ILREG_O(regNewValue)));
+    il.MarkLabel(done);
+    il.AddInstruction(il.SetRegister(regSize, REG_O(regOldValue), regTemp));
+}
+
 bool GetLowLevelILForInstruction(
     Architecture* arch, uint64_t addr, LowLevelILFunction& il, Instruction& instr, size_t addrSize)
 {
@@ -1375,29 +1392,49 @@ bool GetLowLevelILForInstruction(
 	case ARM64_CASA:
 	case ARM64_CASAL:
 	case ARM64_CASL:
-		GenIfElse(il,
-		    il.CompareEqual(
-		        REGSZ_O(operand1), ILREG_O(operand1), il.Load(REGSZ_O(operand1), ILREG_O(operand3))),
-		    il.Store(REGSZ_O(operand1), ILREG_O(operand3), ILREG_O(operand2)), 0);
+        GenMemAtomicCompareAndSwap(il, operand1, operand2, operand3, REGSZ_O(operand1));
 		break;
 	case ARM64_CASAH:  // these compare-and-swaps are 16 bit
 	case ARM64_CASALH:
 	case ARM64_CASH:
 	case ARM64_CASLH:
-		GenIfElse(il,
-		    il.CompareEqual(REGSZ_O(operand1), ExtractRegister(il, operand1, 0, 2, false, 2),
-		        il.Load(2, ILREG_O(operand3))),
-		    il.Store(2, ILREG_O(operand3), ExtractRegister(il, operand2, 0, 2, false, 2)), 0);
+        GenMemAtomicCompareAndSwap(il, operand1, operand2, operand3, 2);
 		break;
 	case ARM64_CASAB:  // these compare-and-swaps are 8 bit
 	case ARM64_CASALB:
 	case ARM64_CASB:
 	case ARM64_CASLB:
-		GenIfElse(il,
-		    il.CompareEqual(REGSZ_O(operand1), ExtractRegister(il, operand1, 0, 1, false, 1),
-		        il.Load(1, ILREG_O(operand3))),
-		    il.Store(1, ILREG_O(operand3), ExtractRegister(il, operand2, 0, 1, false, 1)), 0);
+        GenMemAtomicCompareAndSwap(il, operand1, operand2, operand3, 1);
 		break;
+    case ARM64_CASP:  // these compare-and-swaps can be 32 or 64 bit
+    case ARM64_CASPA:
+    case ARM64_CASPAL:
+    case ARM64_CASPL: {
+        size_t size = REGSZ_O(operand1);
+        InstructionOperand& operand5 = instr.operands[4];
+
+        ExprId addr1 = ILREG_O(operand5);
+        ExprId addr2 = il.Add(REGSZ_O(operand5), ILREG_O(operand5), il.Const(REGSZ_O(operand5), size));
+
+        ExprId temp1 = il.Register(size, LLIL_TEMP(0));
+        ExprId temp2 = il.Register(size, LLIL_TEMP(1));
+
+        il.AddInstruction(il.SetRegister(size, LLIL_TEMP(0), il.Load(size, addr1)));
+        il.AddInstruction(il.SetRegister(size, LLIL_TEMP(1), il.Load(size, addr2)));
+
+        ExprId test = il.And(
+                1, il.CompareEqual(size, ILREG_O(operand1), temp1), il.CompareEqual(size, ILREG_O(operand2), temp2));
+
+        LowLevelILLabel trueCode, falseCode, done;
+        il.AddInstruction(il.If(test, trueCode, done));
+        il.MarkLabel(trueCode);
+        il.AddInstruction(il.Store(size, addr1, ILREG_O(operand3)));
+        il.AddInstruction(il.Store(size, addr2, ILREG_O(operand4)));
+        il.MarkLabel(done);
+        il.AddInstruction(il.SetRegister(size, REG_O(operand1), temp1));
+        il.AddInstruction(il.SetRegister(size, REG_O(operand2), temp2));
+        break;
+    }
 	case ARM64_CBNZ:
 		ConditionalJump(arch, il,
 		    il.CompareNotEqual(REGSZ_O(operand1), ILREG_O(operand1), il.Const(REGSZ_O(operand1), 0)),
