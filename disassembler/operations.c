@@ -101,8 +101,8 @@ const char *operation_to_str(enum Operation oper)
 		case ARM64_BSL2N: return "bsl2n";
 		case ARM64_BTI: return "bti";
 		case ARM64_B_AL: return "b.al";
-		case ARM64_B_CC: return "b.lo";
-		case ARM64_B_CS: return "b.hs";
+		case ARM64_B_CC: return "b.cc";
+		case ARM64_B_CS: return "b.cs";
 		case ARM64_B_EQ: return "b.eq";
 		case ARM64_B_GE: return "b.ge";
 		case ARM64_B_GT: return "b.gt";
