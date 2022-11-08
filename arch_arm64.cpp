@@ -1437,6 +1437,23 @@ class Arm64Architecture : public Architecture
 		}
 	}
 
+	ExprId GetFlagConditionLowLevelIL(BNLowLevelILFlagCondition cond, uint32_t semClass, BinaryNinja::LowLevelILFunction &il) override
+    {
+        switch (cond) 
+		{
+		case LLFC_UGE:
+			return il.Flag(IL_FLAG_C);
+		case LLFC_UGT:
+			return il.And(0, il.Flag(IL_FLAG_C), il.Not(0, il.Flag(IL_FLAG_Z)));
+		case LLFC_ULE:
+			return il.Or(0, il.Not(0, il.Flag(IL_FLAG_C)), il.Flag(IL_FLAG_Z));
+		case LLFC_ULT:
+			return il.Not(0, il.Flag(IL_FLAG_C));
+		default:
+			return Architecture::GetFlagConditionLowLevelIL(cond, semClass, il);
+        }
+    }
+
 
 	/* flag roles */
 
